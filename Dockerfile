@@ -1,7 +1,7 @@
 FROM node:latest
 
 WORKDIR /var/local/
-RUN git clone https://github.com/Talend/data-prep/
+RUN git clone https://github.com/sdiraimondo/talend-data-prep
 WORKDIR /var/local/data-prep/dataprep-webapp/
 RUN npm install
 
