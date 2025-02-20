@@ -1,0 +1,7 @@
+version: "1.0"
+services:
+  data-prep:
+    image: sdiraimondo/talend-data-prep
+    container_name: data-prep
+    network_mode: host
+    restart: unless-stopped
