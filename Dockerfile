@@ -10,7 +10,8 @@ RUN apt update
 #RUN ln -s /usr/bin/python2.7 /usr/bin/python
 #RUN ln -s /usr/bin/python2.7 /usr/bin/python2
 
-# Build the application for muslRUN if [ "$ARCHI" = "aarch64" ]; then \
+# Install PhantomJS for arm64
+RUN if [ "$ARCHI" = "aarch64" ]; then \
 		wget https://launchpad.net/ubuntu/+source/phantomjs/2.1.1+dfsg-1/+build/9053523/+files/phantomjs_2.1.1+dfsg-1_arm64.deb; \
 		dpkg -i phantomjs_2.1.1+dfsg-1_arm64.deb; \
 		wget https://github.com/fg2it/phantomjs-on-raspberry/releases/download/v2.1.1-jessie-stretch-arm64/phantomjs; \
