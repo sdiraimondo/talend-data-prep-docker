@@ -1,4 +1,6 @@
-version: "3.8"
+# Compose v2 (sans champ `version`, deprecate).
+# Un seul service : le Dockerfile multi-arch gere amd64 ET arm64,
+# plus besoin des anciens profils x86 / arm64 separes.
 
 services:
   extract-discovery:
@@ -11,14 +13,8 @@ services:
     ports:
       - "8080:80"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
-    networks:
-      - extract-discovery-net
-
-networks:
-  extract-discovery-net:
-    driver: bridge
