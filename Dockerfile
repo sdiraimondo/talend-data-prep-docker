@@ -1,29 +1,56 @@
-FROM node:latest
+###############################################
+# STAGE 1 : Builder — installation Node/Yarn, clone du repo, build
+###############################################
+FROM debian:stretch-slim AS builder
 
-ARG ARCHI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN echo "deb http://archive.debian.org/debian stretch main" > /etc/apt/sources.list
-RUN echo "deb http://archive.debian.org/debian/ stretch contrib main non-free" > /etc/apt/sources.list
+# --- Installation de Node.js ---
+ENV NODE_VERSION=9.0.0
+RUN set -ex \
+    && curl -fsSLO "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
+    && tar -xJf "node-v$NODE_VERSION-linux-x64.tar.xz" -C /usr/local --strip-components=1 \
+    && rm "node-v$NODE_VERSION-linux-x64.tar.xz"
 
-RUN apt update
-#RUN apt install python2.7
-#RUN ln -s /usr/bin/python2.7 /usr/bin/python
-#RUN ln -s /usr/bin/python2.7 /usr/bin/python2
+# --- Installation de Yarn ---
+ENV YARN_VERSION=1.2.1
+RUN set -ex \
+    && curl -fsSLO "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz" \
+    && mkdir -p /opt/yarn \
+    && tar -xzf "yarn-v$YARN_VERSION.tar.gz" -C /opt/yarn --strip-components=1 \
+    && ln -s /opt/yarn/bin/yarn /usr/local/bin/yarn \
+    && ln -s /opt/yarn/bin/yarnpkg /usr/local/bin/yarnpkg \
+    && rm "yarn-v$YARN_VERSION.tar.gz"
 
-# Install PhantomJS for arm64
-RUN if [ "$ARCHI" = "aarch64" ]; then \
-		wget https://launchpad.net/ubuntu/+source/phantomjs/2.1.1+dfsg-1/+build/9053523/+files/phantomjs_2.1.1+dfsg-1_arm64.deb; \
-		dpkg -i phantomjs_2.1.1+dfsg-1_arm64.deb; \
-		wget https://github.com/fg2it/phantomjs-on-raspberry/releases/download/v2.1.1-jessie-stretch-arm64/phantomjs; \
-		cp ./phantom /usr/bin/phantomjs; \
-    fi
-
+# --- Clonage et build de l'app ---
 WORKDIR /var/local/
-RUN git clone https://github.com/sdiraimondo/talend-data-prep
-WORKDIR /var/local/talend-data-prep/dataprep-webapp/
-RUN npm install
+RUN git clone --depth 1 https://github.com/pontus-vision/pontusvision-extract-discovery
 
-VOLUME /var/local/data-prep
-EXPOSE 3000
+WORKDIR /var/local/pontusvision-extract-discovery/dataprep-webapp/
+RUN npm install \
+    && npm run build
 
-CMD ["npm run serve"]
+
+###############################################
+# STAGE 2 : Image finale — nginx pour servir les fichiers statiques
+###############################################
+FROM nginx:1.25-alpine
+
+# Copie de la configuration nginx personnalisée
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copie du build statique généré par le stage précédent
+# Adapter "dist" si le dossier de sortie du build a un autre nom (build, www...)
+COPY --from=builder /var/local/pontusvision-extract-discovery/dataprep-webapp/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

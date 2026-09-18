@@ -1,0 +1,67 @@
+###############################################
+# STAGE 1 : Builder — installation Node/Yarn, clone du repo, build
+###############################################
+FROM debian:stretch-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    dirmngr \
+    git \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 node \
+    && useradd --uid 1000 --gid node --shell /bin/bash --create-home node
+
+ENV NODE_VERSION=9.0.0
+RUN set -ex \
+    && ARCH="x64" \
+    && curl -fsSLO "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$ARCH.tar.xz" \
+    && tar -xJf "node-v$NODE_VERSION-linux-$ARCH.tar.xz" -C /usr/local --strip-components=1 \
+    && rm "node-v$NODE_VERSION-linux-$ARCH.tar.xz" \
+    && ln -s /usr/local/bin/node /usr/local/bin/nodejs
+
+ENV YARN_VERSION=1.2.1
+RUN set -ex \
+    && curl -fsSLO "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz" \
+    && mkdir -p /opt/yarn \
+    && tar -xzf "yarn-v$YARN_VERSION.tar.gz" -C /opt/yarn --strip-components=1 \
+    && ln -s /opt/yarn/bin/yarn /usr/local/bin/yarn \
+    && ln -s /opt/yarn/bin/yarnpkg /usr/local/bin/yarnpkg \
+    && rm "yarn-v$YARN_VERSION.tar.gz"
+
+WORKDIR /var/local/
+RUN git clone --depth 1 https://github.com/pontus-vision/pontusvision-extract-discovery
+
+WORKDIR /var/local/pontusvision-extract-discovery/dataprep-webapp/
+RUN npm install
+
+
+###############################################
+# STAGE 2 : Image finale — runtime uniquement
+###############################################
+FROM debian:stretch-slim
+
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /opt/yarn /opt/yarn
+RUN ln -s /opt/yarn/bin/yarn /usr/local/bin/yarn \
+    && ln -s /opt/yarn/bin/yarnpkg /usr/local/bin/yarnpkg
+
+RUN groupadd --gid 1000 node \
+    && useradd --uid 1000 --gid node --shell /bin/bash --create-home node
+
+COPY --from=builder --chown=node:node /var/local/pontusvision-extract-discovery /var/local/pontusvision-extract-discovery
+
+WORKDIR /var/local/pontusvision-extract-discovery/dataprep-webapp/
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+
+VOLUME ["/var/local/pontusvision-extract-discovery"]
+EXPOSE 3000/tcp
+
+CMD ["npm", "run", "serve"]
